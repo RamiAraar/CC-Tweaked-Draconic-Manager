@@ -12,7 +12,7 @@ Wiring layout (fixed modem labels):
   draconic_reactor_0 → Reactor Stabilizer
   flow_gate_0        → Input Flux Gate (into reactor)
   flow_gate_1        → Output Flux Gate (to storage/core)
-  monitor_1          → Primary monitor
+  left               → Primary monitor
   computer_1         → Controller computer
 
 Key Features:
@@ -43,13 +43,16 @@ local function logEvent(msg)
     end
 end
 
+--- Runs `func` inside pcall. On failure logs and prints; on success returns the first return from `func`.
 local function safeRun(func, label)
-    local ok, err = pcall(func)
+    local ok, res = pcall(func)
     if not ok then
-        local message = "Error in " .. label .. ": " .. tostring(err)
+        local message = "Error in " .. label .. ": " .. tostring(res)
         logEvent(message)
         print(message)
+        return nil
     end
+    return res
 end
 
 ------------------------------------------------------------
@@ -64,6 +67,7 @@ local function mainLoop()
         if not reac_utils.reactor then
             logEvent("Reactor peripheral lost; reinitializing...")
             safeRun(reac_utils.setup, "reac_utils.setup")
+            safeRun(energy_core_utils.setup, "energy_core_utils.setup")
             sleep(5)
         end
 
@@ -77,10 +81,11 @@ local function mainLoop()
         -- SAFETY CHECKS: Fuel & Chaos Storage
         ----------------------------------------------------
         local fuelChaosOK = safeRun(reac_utils.checkFuelAndChaos, "checkFuelAndChaos")
-        if fuelChaosOK == false then
-            logEvent("Fuel or chaos condition triggered safety halt.")
-            sleep(5)
-            -- Skip further control logic this cycle
+        if fuelChaosOK ~= true then
+            if fuelChaosOK == false then
+                logEvent("Fuel or chaos condition triggered safety halt.")
+                sleep(5)
+            end
             goto continue
         end
 
@@ -97,7 +102,7 @@ local function mainLoop()
         elseif status == "cold" or status == "offline" or status == "cooling" then
             if reac_utils.manualCharge then
                 reac_utils.manualCharge = false
-                safeRun(reac_utils.reactor.chargeReactor, "chargeReactor")
+                safeRun(function() reac_utils.reactor:chargeReactor() end, "chargeReactor")
                 logEvent("Manual charge initiated.")
             end
         ----------------------------------------------------
@@ -117,7 +122,7 @@ local function mainLoop()
             end, "setWarmupFlows")
             if reac_utils.manualStart then
                 reac_utils.manualStart = false
-                safeRun(reac_utils.reactor.activateReactor, "activateReactor")
+                safeRun(function() reac_utils.reactor:activateReactor() end, "activateReactor")
                 logEvent("Manual reactor start requested.")
             end
         ----------------------------------------------------
@@ -125,7 +130,7 @@ local function mainLoop()
         elseif status == "running" or status == "online" then
             if reac_utils.manualStop then
                 reac_utils.manualStop = false
-                safeRun(reac_utils.reactor.stopReactor, "stopReactor")
+                safeRun(function() reac_utils.reactor:stopReactor() end, "stopReactor")
                 logEvent("Manual reactor stop requested.")
             end
             safeRun(reac_utils.adjustReactorTempAndField, "adjustReactorTempAndField")

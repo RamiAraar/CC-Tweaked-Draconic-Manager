@@ -1,11 +1,14 @@
 --==============================================================
 -- ENERGY CORE UTILITIES
 -- Save as: energy_core_utils.lua
+-- Flux gate flow display/logging (refreshed in setup()).
 --==============================================================
 
 local cfg = require("config")
 local p = cfg.peripherals
 local energy_core_utils = {}
+
+local inputGate, outputGate, monitor = nil, nil, nil
 
 local function safeWrap(name)
     if name and peripheral.isPresent(name) then
@@ -14,9 +17,11 @@ local function safeWrap(name)
     return nil
 end
 
-local inputGate  = safeWrap(p.fluxIn)  or safeWrap("flow_gate_0")
-local outputGate = safeWrap(p.fluxOut) or safeWrap("flow_gate_1")
-local monitor    = safeWrap(p.monitors and p.monitors[1]) or safeWrap("monitor_1")
+local function refreshPeripherals()
+    inputGate  = safeWrap(p.fluxIn)  or safeWrap("flow_gate_0")
+    outputGate = safeWrap(p.fluxOut) or safeWrap("flow_gate_1")
+    monitor    = safeWrap(p.monitors and p.monitors[1]) or safeWrap("left")
+end
 
 local function logError(msg)
     local f = fs.open(cfg.energyCore.logsFile or "energy_core.log", "a")
@@ -27,6 +32,7 @@ local function logError(msg)
 end
 
 function energy_core_utils.setup()
+    refreshPeripherals()
     if not monitor then
         logError("Monitor not found, running headless.")
         return

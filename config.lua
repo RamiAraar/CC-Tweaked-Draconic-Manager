@@ -61,7 +61,7 @@ config.peripherals = {
     reactor  = "draconic_reactor_0",      -- Reactor stabilizer modem
     fluxIn   = "flow_gate_0",             -- Input flux gate
     fluxOut  = "flow_gate_1",             -- Output flux gate
-    monitors = {"monitor_1"}              -- Primary monitor
+    monitors = {"left"}                   -- Primary monitor (computer side)
 }
 
 ------------------------------------------------------------

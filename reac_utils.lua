@@ -12,7 +12,7 @@ Expected modem labels:
   draconic_reactor_0  → Reactor stabilizer
   flow_gate_0         → Input flux gate (into reactor)
   flow_gate_1         → Output flux gate (to storage/core)
-  monitor_1           → Status display monitor
+  left                → Status display monitor
 ]]
 
 ------------------------------------------------------------
@@ -30,6 +30,11 @@ reac_utils.gateIn   = nil
 reac_utils.gateOut  = nil
 reac_utils.mon      = nil
 reac_utils.info     = {}
+
+-- Set these to true from another script or the shell to trigger one-shot actions (e.g. monitor UI).
+reac_utils.manualCharge = false
+reac_utils.manualStart  = false
+reac_utils.manualStop   = false
 
 ------------------------------------------------------------
 -- INTERNAL LOGGER
@@ -64,7 +69,7 @@ function reac_utils.setup()
     reac_utils.reactor = safeWrap(p.reactor) or safeWrap("draconic_reactor_0")
     reac_utils.gateIn  = safeWrap(p.fluxIn)  or safeWrap("flow_gate_0")
     reac_utils.gateOut = safeWrap(p.fluxOut) or safeWrap("flow_gate_1")
-    reac_utils.mon     = safeWrap(p.monitors and p.monitors[1]) or safeWrap("monitor_1")
+    reac_utils.mon     = safeWrap(p.monitors and p.monitors[1]) or safeWrap("left")
 
     -- Validation
     if not reac_utils.reactor then error("Reactor stabilizer not found!") end
@@ -93,7 +98,7 @@ function reac_utils.checkReactorStatus()
         return
     end
 
-    local ok, data = pcall(reac_utils.reactor.getReactorInfo)
+    local ok, data = pcall(function() return reac_utils.reactor:getReactorInfo() end)
     if not ok or not data then
         logError("Failed to read reactor info.")
         return
@@ -107,8 +112,14 @@ end
 function reac_utils.isEmergency()
     local i = reac_utils.info
     if not i or not i.temperature then return false end
-    local fieldPct = (i.fieldStrength / i.maxFieldStrength)
-    local fuelPct  = 1.0 - (i.fuelConversion / i.maxFuelConversion)
+
+    local maxField = i.maxFieldStrength
+    local fieldPct = (maxField and maxField > 0) and (i.fieldStrength / maxField) or 1.0
+
+    local maxFuel = i.maxFuelConversion
+    local fuelPct = (maxFuel and maxFuel > 0)
+        and (1.0 - (i.fuelConversion / maxFuel))
+        or 1.0
 
     return (i.temperature > cfg.reactor.defaultTemp + cfg.reactor.maxOvershoot)
         or (fieldPct < cfg.reactor.shutDownField)
@@ -120,7 +131,7 @@ end
 ------------------------------------------------------------
 function reac_utils.failSafeShutdown()
     if reac_utils.reactor and reac_utils.reactor.stopReactor then
-        reac_utils.reactor.stopReactor()
+        reac_utils.reactor:stopReactor()
     end
     if reac_utils.gateIn then reac_utils.gateIn.setFlowOverride(0) end
     if reac_utils.gateOut then reac_utils.gateOut.setFlowOverride(0) end
@@ -133,22 +144,34 @@ end
 function reac_utils.checkFuelAndChaos()
     if not reac_utils.reactor then return false end
 
-    local info = reac_utils.reactor.getReactorInfo()
-    if not info then return false end
+    local ok, info = pcall(function() return reac_utils.reactor:getReactorInfo() end)
+    if not ok or not info then
+        logError("Failed to read reactor info during fuel/chaos check.")
+        return false
+    end
 
-    local fuelLeft = 1.0 - (info.fuelConversion / info.maxFuelConversion)
+    local maxFuel = info.maxFuelConversion
+    if not maxFuel or maxFuel <= 0 then
+        logError("Invalid maxFuelConversion from reactor; skipping fuel check.")
+        return false
+    end
+
+    local fuelLeft = 1.0 - (info.fuelConversion / maxFuel)
     if fuelLeft <= 0 then
         logError("Reactor has no fuel! Insert fuel before startup.")
         reac_utils.failSafeShutdown()
         return false
     end
 
-    if info.energySaturation >= info.maxEnergySaturation then
-        logError("Chaos energy buffer full — shutting down to prevent overload.")
-        reac_utils.failSafeShutdown()
-        return false
-    elseif info.energySaturation >= info.maxEnergySaturation * 0.95 then
-        logError("Warning: Chaos storage nearing full capacity.")
+    local maxChaos = info.maxEnergySaturation
+    if maxChaos and maxChaos > 0 then
+        if info.energySaturation >= maxChaos then
+            logError("Chaos energy buffer full — shutting down to prevent overload.")
+            reac_utils.failSafeShutdown()
+            return false
+        elseif info.energySaturation >= maxChaos * 0.95 then
+            logError("Warning: Chaos storage nearing full capacity.")
+        end
     end
 
     return true
@@ -161,7 +184,9 @@ function reac_utils.adjustReactorTempAndField()
     local i = reac_utils.info
     if not i or not i.temperature then return end
 
-    local fieldPct = (i.fieldStrength / i.maxFieldStrength)
+    local maxField = i.maxFieldStrength
+    if not maxField or maxField <= 0 then return end
+    local fieldPct = i.fieldStrength / maxField
     local targetField = cfg.reactor.defaultField
     local inflow = 0
     local outflow = 0
@@ -186,8 +211,8 @@ end
 -- HANDLE STOPPING
 ------------------------------------------------------------
 function reac_utils.handleReactorStopping()
-    reac_utils.gateIn.setFlowOverride(0)
-    reac_utils.gateOut.setFlowOverride(0)
+    if reac_utils.gateIn then reac_utils.gateIn.setFlowOverride(0) end
+    if reac_utils.gateOut then reac_utils.gateOut.setFlowOverride(0) end
 end
 
 return reac_utils
