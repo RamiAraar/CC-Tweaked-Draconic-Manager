@@ -48,7 +48,7 @@ Credit is appreciated but not required. My goal was simply to demonstrate the co
 2. **Download the install script**:
    - Run the following command to download the installation script from GitHub:
      ```shell
-     wget https://raw.githubusercontent.com/owzo/CC-Tweaked-Draconic-Manager/main/install.lua install.lua
+     wget https://raw.githubusercontent.com/RamiAraar/CC-Tweaked-Draconic-Manager/main/install.lua install.lua
      ```
 
 3. **Run the install script**:
