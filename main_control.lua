@@ -99,11 +99,12 @@ local function mainLoop()
         ----------------------------------------------------
         -- COLD / OFFLINE STATE (Can charge)
         ----------------------------------------------------
+        -- Same RF path as "charging": input gate must allow energy in or the core never warms up.
         elseif status == "cold" or status == "offline" or status == "cooling" then
             safeRun(function()
-                reac_utils.gateIn.setFlowOverride(0)
+                reac_utils.gateIn.setFlowOverride(config.reactor.chargeInflow)
                 reac_utils.gateOut.setFlowOverride(0)
-            end, "setIdleGatesCold")
+            end, "setChargeFlowsCold")
             if reac_utils.manualCharge then
                 reac_utils.manualCharge = false
                 logEvent("Manual charge pulse (auto charge runs every tick while cold).")
