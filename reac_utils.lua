@@ -108,10 +108,21 @@ end
 
 ------------------------------------------------------------
 -- EMERGENCY CHECK
+-- Low field / fuel are normal when idle (cold, charging, etc.); only treat them as
+-- emergencies while the reactor is supposed to be online. Temperature runaway is always checked.
 ------------------------------------------------------------
 function reac_utils.isEmergency()
     local i = reac_utils.info
     if not i or not i.temperature then return false end
+
+    if i.temperature > cfg.reactor.defaultTemp + cfg.reactor.maxOvershoot then
+        return true
+    end
+
+    local status = i.status or "unknown"
+    if status ~= "running" and status ~= "online" then
+        return false
+    end
 
     local maxField = i.maxFieldStrength
     local fieldPct = (maxField and maxField > 0) and (i.fieldStrength / maxField) or 1.0
@@ -121,8 +132,7 @@ function reac_utils.isEmergency()
         and (1.0 - (i.fuelConversion / maxFuel))
         or 1.0
 
-    return (i.temperature > cfg.reactor.defaultTemp + cfg.reactor.maxOvershoot)
-        or (fieldPct < cfg.reactor.shutDownField)
+    return (fieldPct < cfg.reactor.shutDownField)
         or (fuelPct < cfg.reactor.minFuel)
 end
 

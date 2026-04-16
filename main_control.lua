@@ -100,11 +100,15 @@ local function mainLoop()
         -- COLD / OFFLINE STATE (Can charge)
         ----------------------------------------------------
         elseif status == "cold" or status == "offline" or status == "cooling" then
+            safeRun(function()
+                reac_utils.gateIn.setFlowOverride(0)
+                reac_utils.gateOut.setFlowOverride(0)
+            end, "setIdleGatesCold")
             if reac_utils.manualCharge then
                 reac_utils.manualCharge = false
-                safeRun(function() reac_utils.reactor:chargeReactor() end, "chargeReactor")
-                logEvent("Manual charge initiated.")
+                logEvent("Manual charge pulse (auto charge runs every tick while cold).")
             end
+            safeRun(function() reac_utils.reactor:chargeReactor() end, "autoChargeFromCold")
         ----------------------------------------------------
         -- CHARGING STATE
         ----------------------------------------------------
@@ -122,9 +126,9 @@ local function mainLoop()
             end, "setWarmupFlows")
             if reac_utils.manualStart then
                 reac_utils.manualStart = false
-                safeRun(function() reac_utils.reactor:activateReactor() end, "activateReactor")
-                logEvent("Manual reactor start requested.")
+                logEvent("Manual reactor start pulse (auto-activate runs every tick while charged).")
             end
+            safeRun(function() reac_utils.reactor:activateReactor() end, "autoActivateReactor")
         ----------------------------------------------------
         -- RUNNING / ONLINE STATE
         elseif status == "running" or status == "online" then
